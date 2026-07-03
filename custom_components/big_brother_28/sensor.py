@@ -1,25 +1,35 @@
 """Sensor platform for Big Brother 28."""
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.event import async_track_time_change
+from homeassistant.helpers.event import (
+    async_track_point_in_time,
+    async_track_time_interval,
+)
 from homeassistant.helpers.restore_state import RestoreEntity
 import homeassistant.util.dt as dt_util
 
 from .const import (
     CONF_HOUSEMATES,
     CONF_START_DATE,
+    CONF_TIMEZONE,
     DEFAULT_EVENT_STATE,
     DEFAULT_HOUSEMATE_STATUS,
+    DEFAULT_TIMEZONE,
     DOMAIN,
     ICON_STATIC_URL,
 )
+
+
+def _get_tz(entry: ConfigEntry):
+    name = entry.options.get(CONF_TIMEZONE, DEFAULT_TIMEZONE)
+    return dt_util.get_time_zone(name) or dt_util.get_time_zone(DEFAULT_TIMEZONE)
 
 
 def _device_info(entry: ConfigEntry) -> DeviceInfo:
@@ -72,7 +82,7 @@ class BB28HouseDaySensor(SensorEntity):
         start = self._start_date()
         if start is None:
             return None
-        delta = dt_util.now().date() - start
+        delta = dt_util.now(_get_tz(self._entry)).date() - start
         return max(delta.days + 1, 0)
 
     def _start_date(self) -> date | None:
@@ -85,16 +95,24 @@ class BB28HouseDaySensor(SensorEntity):
             return None
 
     async def async_added_to_hass(self) -> None:
-        self._unsub = async_track_time_change(
-            self.hass, self._handle_midnight, hour=0, minute=0, second=0
-        )
+        self._schedule_next_midnight()
 
     async def async_will_remove_from_hass(self) -> None:
         if self._unsub:
             self._unsub()
 
+    def _schedule_next_midnight(self) -> None:
+        now = dt_util.now(_get_tz(self._entry))
+        next_midnight = (now + timedelta(days=1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        self._unsub = async_track_point_in_time(
+            self.hass, self._handle_midnight, next_midnight
+        )
+
     def _handle_midnight(self, _now) -> None:
         self.async_write_ha_state()
+        self._schedule_next_midnight()
 
 
 class BB28HouseTimeSensor(SensorEntity):
@@ -113,11 +131,9 @@ class BB28HouseTimeSensor(SensorEntity):
 
     @property
     def native_value(self) -> str:
-        return dt_util.now().strftime("%H:%M")
+        return dt_util.now(_get_tz(self._entry)).strftime("%H:%M")
 
     async def async_added_to_hass(self) -> None:
-        from homeassistant.helpers.event import async_track_time_interval
-
         self._unsub = async_track_time_interval(
             self.hass, self._handle_tick, timedelta(minutes=1)
         )

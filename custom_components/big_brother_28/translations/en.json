@@ -5,7 +5,8 @@
         "title": "Big Brother 28",
         "description": "Season premiere date sets Day 1 for the House Day sensor.",
         "data": {
-          "start_date": "Start date (YYYY-MM-DD)"
+          "start_date": "Start date (YYYY-MM-DD)",
+          "timezone": "House timezone (IANA name, e.g. America/Los_Angeles)"
         }
       }
     }
@@ -16,6 +17,7 @@
         "title": "Big Brother 28 options",
         "data": {
           "start_date": "Start date (YYYY-MM-DD)",
+          "timezone": "House timezone (IANA name, e.g. America/Los_Angeles)",
           "housemates": "Housemates (comma-separated)"
         }
       }

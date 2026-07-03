@@ -4,6 +4,10 @@ DOMAIN = "big_brother_28"
 
 CONF_START_DATE = "start_date"
 CONF_HOUSEMATES = "housemates"
+CONF_TIMEZONE = "timezone"
+
+DEFAULT_START_DATE = "2026-07-09"
+DEFAULT_TIMEZONE = "America/Los_Angeles"
 
 STORAGE_VERSION = 1
 STORAGE_KEY_HOUSEMATES = "housemates"

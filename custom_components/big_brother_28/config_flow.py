@@ -6,7 +6,14 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 
-from .const import CONF_HOUSEMATES, CONF_START_DATE, DOMAIN
+from .const import (
+    CONF_HOUSEMATES,
+    CONF_START_DATE,
+    CONF_TIMEZONE,
+    DEFAULT_START_DATE,
+    DEFAULT_TIMEZONE,
+    DOMAIN,
+)
 
 
 class BigBrother28ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -25,11 +32,17 @@ class BigBrother28ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 data={},
                 options={
                     CONF_START_DATE: user_input[CONF_START_DATE],
+                    CONF_TIMEZONE: user_input[CONF_TIMEZONE],
                     CONF_HOUSEMATES: [],
                 },
             )
 
-        schema = vol.Schema({vol.Required(CONF_START_DATE): str})
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_START_DATE, default=DEFAULT_START_DATE): str,
+                vol.Required(CONF_TIMEZONE, default=DEFAULT_TIMEZONE): str,
+            }
+        )
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
 
     @staticmethod
@@ -58,6 +71,7 @@ class BigBrother28OptionsFlow(config_entries.OptionsFlow):
                 title="",
                 data={
                     CONF_START_DATE: user_input[CONF_START_DATE],
+                    CONF_TIMEZONE: user_input[CONF_TIMEZONE],
                     CONF_HOUSEMATES: names,
                 },
             )
@@ -65,7 +79,12 @@ class BigBrother28OptionsFlow(config_entries.OptionsFlow):
         schema = vol.Schema(
             {
                 vol.Required(
-                    CONF_START_DATE, default=options.get(CONF_START_DATE, "")
+                    CONF_START_DATE,
+                    default=options.get(CONF_START_DATE, DEFAULT_START_DATE),
+                ): str,
+                vol.Required(
+                    CONF_TIMEZONE,
+                    default=options.get(CONF_TIMEZONE, DEFAULT_TIMEZONE),
                 ): str,
                 vol.Optional(
                     CONF_HOUSEMATES,
