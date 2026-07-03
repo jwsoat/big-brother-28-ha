@@ -18,10 +18,10 @@ The two are decoupled: the HA integration works standalone (as it does today, vi
 `HOUSEMATE_STATUSES` becomes:
 
 ```
-HOH, Nominated, Veto Competitor, Veto Player, Safe, Eliminated
+HOH, Nominated, Veto Competitor, Veto Winner, Safe, Eliminated
 ```
 
-- `Veto Player` = current POV holder/winner (existing meaning, unchanged).
+- `Veto Winner` = current POV holder/winner (existing meaning, unchanged).
 - `Veto Competitor` = new. Only applies to housemates playing in that week's veto competition who are **not** already HOH or Nominated (those two already imply participation, so they keep their existing status rather than being overwritten).
 
 ### Extra per-housemate attributes (not statuses — coexist with the main status)
@@ -44,7 +44,7 @@ HOH -> Nominations -> Veto Picks -> Veto -> Live Show -> (back to HOH)
 | A housemate's status is set to `HOH` | Nominations |
 | 2+ housemates are currently `Nominated` (after this call) | Veto Picks |
 | A non-HOH/non-nominee housemate's status is set to `Veto Competitor` | Veto |
-| A housemate's status is set to `Veto Player` | Live Show |
+| A housemate's status is set to `Veto Winner` | Live Show |
 | A housemate's status is set to `Eliminated` | HOH |
 
 The existing `big_brother_28.set_next_event` service remains as a manual override (e.g. special episodes, double evictions) and always wins over the auto-advance for that call.
@@ -70,28 +70,38 @@ Vercel Cron, `0 22 * * *` (22:00 UTC = 3pm PT). BB28's season runs entirely with
 
 ### Sources
 
-Seven X (Twitter) accounts, scraped daily for each account's last-24h posts:
+**X (Twitter) accounts** — 7 accounts, scraped daily for each account's last-24h posts:
 
 ```
 TheBigBroTea, hamsterwatch, 89razorskate20, BBFeedsFairy, rbbq, bigbrothernet, BBigBrotherBuzz
 ```
 
+**RSS feeds** — 3 fan-run recap blogs, standard feed fetch, no auth needed, far more reliable than the X scrape since these are full prose daily recaps rather than scattered posts:
+
+```
+https://bigbrothernetwork.com/feed/
+https://bigbrotherus.com/feed/
+https://www.onlinebigbrother.com/feed/
+```
+
+Fetched via a standard feed parser (e.g. `feedparser`), filtered to entries published in the last 24h.
+
 ### Auth
 
-X requires an authenticated session for reliable access in 2026 — a dedicated burner X account (not the user's real account) logs in via `twikit`. Credentials stored as Vercel env secrets, never committed.
+X requires an authenticated session for reliable access in 2026 — a dedicated burner X account (not the user's real account) logs in via `twikit`. Credentials stored as Vercel env secrets, never committed. The RSS feeds need no auth at all.
 
 ### Pipeline
 
-1. **Scrape**: log in as the burner account, pull last-24h posts from all 7 accounts.
-2. **Aggregate**: merge into one raw timestamped feed for the day, tagged by source account.
-3. **Extract** (Claude call #1): given the raw feed, produce structured JSON of only clearly-stated facts (who won HOH, who's nominated, who's playing/won veto, who got evicted, have-not results) — each fact tagged with which account(s) stated it. Ambiguous/speculative chatter produces no fact.
+1. **Fetch**: log in as the burner account and pull last-24h posts from all 7 X accounts; in parallel, fetch and filter the 3 RSS feeds to entries from the last 24h.
+2. **Aggregate**: merge X posts + RSS entries into one raw timestamped feed for the day, tagged by source.
+3. **Extract** (Claude call #1): given the raw feed, produce structured JSON of only clearly-stated facts (who won HOH, who's nominated, who's playing/won veto, who got evicted, have-not results) — each fact tagged with which source(s) stated it. Ambiguous/speculative chatter produces no fact.
 4. **Push to HA**: for each extracted fact, call the matching HA service over REST (`POST {HA_BASE_URL}/api/services/big_brother_28/<service>`, authenticated with a long-lived access token) — `set_housemate_status`, `set_have_not`, `set_jury_status`, or `set_next_event` as an override where relevant. Failures (network/auth) are logged and skipped; they never block steps 5–6.
 5. **Summarize** (Claude call #2): given the same raw feed (plus the facts extracted in step 3 for consistency), produce a segmented talking-points outline sized for 60+ minutes of live commentary: Overnight Recap, HOH/Nominations, Veto, Showmances, House Drama, Predictions/Wrap-up. Talking points, not a word-for-word script.
 6. **Email**: send the outline via Resend to `info@jwsoat.com`, subject `BB28 Daily Recap — Day N` (day number computed locally from the same `2026-07-09` start date, in `America/Los_Angeles`). The email also lists what got auto-applied to HA in step 4 (e.g. "Auto-updated: Alex → Eliminated, per @hamsterwatch") so the user can visually confirm or correct via the existing HA services if a fact was wrong.
 
 ### Error handling
 
-- A source account returning no new posts is called out in the email ("no fresh posts found for @X — possible scrape break"), not silently dropped.
+- A source (X account or RSS feed) returning no new content is called out in the email ("no fresh posts/entries found for @X / feed Y — possible scrape break"), not silently dropped.
 - Claude/Resend/HA-push failures are logged to Vercel's function logs. No secondary delivery channel for v1 — a missing email is the signal something broke.
 
 ### Secrets (Vercel env vars)
@@ -105,11 +115,11 @@ The Vercel project's HA-push step depends on the new services (`set_have_not`, `
 ## Out of scope (for this spec)
 
 - Full jury-vote modeling beyond the `jury_member` flag.
-- Any data source besides the 7 named X accounts (no Facebook sources were ultimately provided).
+- Any data source besides the 7 named X accounts and 3 named RSS feeds (no Facebook sources were ultimately provided).
 - Retry/secondary delivery if the daily email fails to send.
 - Historical archive/searchable log of past daily recaps.
 
 ## Risks
 
-- **X scraping fragility**: burner-account session scraping can break if X changes auth flow or flags the account. Mitigated by the "flag missing source in email" behavior rather than silent gaps, but no auto-recovery in v1.
+- **X scraping fragility**: burner-account session scraping can break if X changes auth flow or flags the account. The RSS feeds are a more stable fallback source of full recap content if X access degrades. Mitigated by the "flag missing source in email" behavior rather than silent gaps, but no auto-recovery in v1.
 - **LLM extraction accuracy**: Claude misreading a joke/sarcastic post as a real game event would push a wrong status to HA. Mitigated by requiring clearly-stated facts only and surfacing every auto-applied change in the email for manual review/correction.
