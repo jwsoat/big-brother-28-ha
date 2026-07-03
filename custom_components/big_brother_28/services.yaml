@@ -1,0 +1,65 @@
+add_housemate:
+  name: Add housemate
+  description: Add a housemate and create their status sensor.
+  fields:
+    name:
+      required: true
+      example: "Alex"
+      selector:
+        text:
+
+remove_housemate:
+  name: Remove housemate
+  description: Remove a housemate's status sensor.
+  fields:
+    name:
+      required: true
+      example: "Alex"
+      selector:
+        text:
+
+set_housemate_status:
+  name: Set housemate status
+  description: Update a housemate's current status.
+  fields:
+    name:
+      required: true
+      example: "Alex"
+      selector:
+        text:
+    status:
+      required: true
+      selector:
+        select:
+          options:
+            - "HOH"
+            - "Nominated"
+            - "Veto Player"
+            - "Safe"
+            - "Eliminated"
+
+set_next_event:
+  name: Set next event
+  description: Update the next upcoming event.
+  fields:
+    event_type:
+      required: true
+      selector:
+        select:
+          options:
+            - "HOH"
+            - "Veto"
+            - "Live Show"
+            - "Eviction"
+            - "Nominations"
+            - "Other"
+    detail:
+      required: false
+      example: "Veto Ceremony"
+      selector:
+        text:
+    scheduled_time:
+      required: false
+      example: "2026-07-10T20:00:00"
+      selector:
+        datetime:

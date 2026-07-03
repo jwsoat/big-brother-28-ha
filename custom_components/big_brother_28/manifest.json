@@ -1,0 +1,11 @@
+{
+  "domain": "big_brother_28",
+  "name": "Big Brother 28",
+  "codeowners": [],
+  "config_flow": true,
+  "documentation": "https://www.home-assistant.io/integrations/big_brother_28",
+  "integration_type": "hub",
+  "iot_class": "calculated",
+  "requirements": [],
+  "version": "1.0.0"
+}
