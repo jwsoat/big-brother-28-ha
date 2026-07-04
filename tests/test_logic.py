@@ -1,6 +1,7 @@
 """Unit tests for pure BB28 game-state logic (no Home Assistant dependency)."""
 from custom_components.big_brother_28 import logic
 from custom_components.big_brother_28.const import (
+    DEFAULT_HOUSEMATE_STATUS,
     EVENT_HOH,
     EVENT_LIVE_SHOW,
     EVENT_NOMINATIONS,
@@ -111,3 +112,15 @@ def test_eliminated_status_advances_the_week():
 
 def test_hoh_status_does_not_advance_the_week():
     assert logic.is_week_advancing_status(STATUS_HOH) is False
+
+
+def test_normalize_restored_status_maps_legacy_veto_player():
+    assert logic.normalize_restored_status("Veto Player") == STATUS_VETO_WINNER
+
+
+def test_normalize_restored_status_passes_through_valid_status():
+    assert logic.normalize_restored_status(STATUS_SAFE) == STATUS_SAFE
+
+
+def test_normalize_restored_status_falls_back_for_unrecognized_string():
+    assert logic.normalize_restored_status("garbage") == DEFAULT_HOUSEMATE_STATUS

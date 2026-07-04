@@ -108,6 +108,14 @@ def _refresh_aggregates(hass: HomeAssistant, entry_id: str) -> None:
         entity.refresh()
 
 
+def _get_housemate_entity(hass: HomeAssistant, entry_id: str, name: str):
+    entities = hass.data[DOMAIN][entry_id]["housemate_entities"]
+    entity = entities.get(name)
+    if entity is None:
+        raise ValueError(f"No housemate sensor found for '{name}'")
+    return entity
+
+
 def _async_register_services(hass: HomeAssistant) -> None:
     if hass.services.has_service(DOMAIN, SERVICE_ADD_HOUSEMATE):
         return
@@ -143,16 +151,13 @@ def _async_register_services(hass: HomeAssistant) -> None:
         name = call.data[ATTR_NAME].strip()
         status = call.data[ATTR_STATUS]
         store = hass.data[DOMAIN][entry.entry_id]
-        entities = store["housemate_entities"]
-        entity = entities.get(name)
-        if entity is None:
-            raise ValueError(f"No housemate sensor found for '{name}'")
+        entity = _get_housemate_entity(hass, entry.entry_id, name)
 
         entity.set_status(status)
 
         updated_statuses = {
             housemate_name: housemate_entity.native_value
-            for housemate_name, housemate_entity in entities.items()
+            for housemate_name, housemate_entity in store["housemate_entities"].items()
         }
         next_event_value = logic.next_event_after_status_change(
             status, updated_statuses
@@ -180,10 +185,7 @@ def _async_register_services(hass: HomeAssistant) -> None:
         entry = await _get_entry(call)
         name = call.data[ATTR_NAME].strip()
         is_have_not = call.data[ATTR_IS_HAVE_NOT]
-        entities = hass.data[DOMAIN][entry.entry_id]["housemate_entities"]
-        entity = entities.get(name)
-        if entity is None:
-            raise ValueError(f"No housemate sensor found for '{name}'")
+        entity = _get_housemate_entity(hass, entry.entry_id, name)
         entity.set_have_not(is_have_not)
         _refresh_aggregates(hass, entry.entry_id)
 
@@ -191,10 +193,7 @@ def _async_register_services(hass: HomeAssistant) -> None:
         entry = await _get_entry(call)
         name = call.data[ATTR_NAME].strip()
         is_jury_member = call.data[ATTR_IS_JURY_MEMBER]
-        entities = hass.data[DOMAIN][entry.entry_id]["housemate_entities"]
-        entity = entities.get(name)
-        if entity is None:
-            raise ValueError(f"No housemate sensor found for '{name}'")
+        entity = _get_housemate_entity(hass, entry.entry_id, name)
         entity.set_jury_status(is_jury_member)
         _refresh_aggregates(hass, entry.entry_id)
 

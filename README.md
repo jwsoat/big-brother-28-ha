@@ -19,8 +19,16 @@ Both start date and timezone are editable later via the integration's **Configur
 |---|---|
 | `sensor.house_day` | Day N, auto-computed from start date at PT midnight |
 | `sensor.house_time` | live clock, HH:MM, in house timezone |
-| `sensor.next_event` | HOH / Veto / Live Show / Eviction / Nominations / Other (+ `detail`, `scheduled_time` attrs) |
-| `sensor.<housemate_name>` | HOH / Nominated / Veto Player / Safe / Eliminated |
+| `sensor.next_event` | HOH / Nominations / Veto Picks / Veto / Live Show / Eviction / Other (+ `detail`, `scheduled_time` attrs) |
+| `sensor.<housemate_name>` | HOH / Nominated / Veto Competitor / Veto Winner / Safe / Eliminated |
+| `sensor.week_number` | Current BB week number, increments each eviction |
+| `sensor.current_hoh` | Name of whoever currently holds HOH |
+| `sensor.current_nominees` | Comma-joined list of currently nominated housemates |
+| `sensor.current_veto_competitors` | Comma-joined list of housemates playing in this week's veto |
+| `sensor.current_have_nots` | Comma-joined list of housemates currently flagged have-not |
+| `sensor.jury_members` | Comma-joined list of eliminated housemates on the jury |
+
+`next_event` auto-advances through the weekly cycle (HOH → Nominations → Veto Picks → Veto → Live Show → back to HOH on eviction) whenever a housemate's status is set to HOH, their 2nd Nominated, Veto Competitor, Veto Winner, or Eliminated — you don't need a separate `set_next_event` call for those transitions. Use `set_next_event` only for manual overrides (e.g. scheduling Live Show or Eviction times).
 
 ## Services
 
@@ -33,6 +41,12 @@ data: { name: "Alex", status: "HOH" }
 
 service: big_brother_28.set_next_event
 data: { event_type: "Veto", detail: "Veto Ceremony", scheduled_time: "2026-07-10T20:00:00" }
+
+service: big_brother_28.set_have_not
+data: { name: "Alex", is_have_not: true }
+
+service: big_brother_28.set_jury_status
+data: { name: "Alex", is_jury_member: true }
 
 service: big_brother_28.remove_housemate
 data: { name: "Alex" }

@@ -264,7 +264,7 @@ class BB28HousemateSensor(RestoreEntity, SensorEntity):
         await super().async_added_to_hass()
         last_state = await self.async_get_last_state()
         if last_state is not None and last_state.state is not None:
-            self._state = last_state.state
+            self._state = logic.normalize_restored_status(last_state.state)
             self._have_not = bool(last_state.attributes.get(ATTR_IS_HAVE_NOT, False))
             self._jury_member = bool(
                 last_state.attributes.get(ATTR_IS_JURY_MEMBER, False)

@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 from .const import (
+    DEFAULT_HOUSEMATE_STATUS,
     EVENT_HOH,
     EVENT_LIVE_SHOW,
     EVENT_NOMINATIONS,
     EVENT_VETO,
     EVENT_VETO_PICKS,
+    HOUSEMATE_STATUSES,
     STATUS_ELIMINATED,
     STATUS_HOH,
     STATUS_NOMINATED,
@@ -74,3 +76,12 @@ def next_event_after_status_change(
 def is_week_advancing_status(new_status: str) -> bool:
     """True if this status change closes out a BB week (eviction)."""
     return new_status == STATUS_ELIMINATED
+
+
+def normalize_restored_status(raw_status: str) -> str:
+    """Map a status restored from a prior release to a currently-valid one."""
+    if raw_status == "Veto Player":
+        return STATUS_VETO_WINNER
+    if raw_status in HOUSEMATE_STATUSES:
+        return raw_status
+    return DEFAULT_HOUSEMATE_STATUS
