@@ -2,10 +2,16 @@
 from __future__ import annotations
 
 from .const import (
+    EVENT_HOH,
+    EVENT_LIVE_SHOW,
+    EVENT_NOMINATIONS,
+    EVENT_VETO,
+    EVENT_VETO_PICKS,
     STATUS_ELIMINATED,
     STATUS_HOH,
     STATUS_NOMINATED,
     STATUS_VETO_COMPETITOR,
+    STATUS_VETO_WINNER,
 )
 
 
@@ -44,3 +50,27 @@ def compute_jury_members(
         for name, status in statuses.items()
         if status == STATUS_ELIMINATED and jury_flags.get(name, False)
     ]
+
+
+def next_event_after_status_change(
+    new_status: str, statuses_after_change: dict[str, str]
+) -> str | None:
+    """Return the next_event value triggered by this status change, or None."""
+    if new_status == STATUS_HOH:
+        return EVENT_NOMINATIONS
+    if new_status == STATUS_NOMINATED:
+        if len(compute_nominees(statuses_after_change)) >= 2:
+            return EVENT_VETO_PICKS
+        return None
+    if new_status == STATUS_VETO_COMPETITOR:
+        return EVENT_VETO
+    if new_status == STATUS_VETO_WINNER:
+        return EVENT_LIVE_SHOW
+    if new_status == STATUS_ELIMINATED:
+        return EVENT_HOH
+    return None
+
+
+def is_week_advancing_status(new_status: str) -> bool:
+    """True if this status change closes out a BB week (eviction)."""
+    return new_status == STATUS_ELIMINATED

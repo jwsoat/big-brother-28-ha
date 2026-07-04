@@ -1,11 +1,17 @@
 """Unit tests for pure BB28 game-state logic (no Home Assistant dependency)."""
 from custom_components.big_brother_28 import logic
 from custom_components.big_brother_28.const import (
+    EVENT_HOH,
+    EVENT_LIVE_SHOW,
+    EVENT_NOMINATIONS,
+    EVENT_VETO,
+    EVENT_VETO_PICKS,
     STATUS_ELIMINATED,
     STATUS_HOH,
     STATUS_NOMINATED,
     STATUS_SAFE,
     STATUS_VETO_COMPETITOR,
+    STATUS_VETO_WINNER,
 )
 
 
@@ -58,3 +64,50 @@ def test_compute_jury_members_requires_eliminated_and_flag():
     }
     jury_flags = {"Alex": True, "Jordan": False, "Sam": True}
     assert logic.compute_jury_members(statuses, jury_flags) == ["Alex"]
+
+
+def test_hoh_status_advances_to_nominations():
+    result = logic.next_event_after_status_change(STATUS_HOH, {"Alex": STATUS_HOH})
+    assert result == EVENT_NOMINATIONS
+
+
+def test_single_nominee_does_not_advance_yet():
+    statuses = {"Alex": STATUS_NOMINATED, "Jordan": STATUS_SAFE}
+    assert logic.next_event_after_status_change(STATUS_NOMINATED, statuses) is None
+
+
+def test_second_nominee_advances_to_veto_picks():
+    statuses = {"Alex": STATUS_NOMINATED, "Jordan": STATUS_NOMINATED}
+    result = logic.next_event_after_status_change(STATUS_NOMINATED, statuses)
+    assert result == EVENT_VETO_PICKS
+
+
+def test_veto_competitor_status_advances_to_veto():
+    statuses = {"Alex": STATUS_VETO_COMPETITOR}
+    result = logic.next_event_after_status_change(STATUS_VETO_COMPETITOR, statuses)
+    assert result == EVENT_VETO
+
+
+def test_veto_winner_status_advances_to_live_show():
+    statuses = {"Alex": STATUS_VETO_WINNER}
+    result = logic.next_event_after_status_change(STATUS_VETO_WINNER, statuses)
+    assert result == EVENT_LIVE_SHOW
+
+
+def test_eliminated_status_advances_to_hoh():
+    statuses = {"Alex": STATUS_ELIMINATED}
+    result = logic.next_event_after_status_change(STATUS_ELIMINATED, statuses)
+    assert result == EVENT_HOH
+
+
+def test_safe_status_does_not_advance():
+    statuses = {"Alex": STATUS_SAFE}
+    assert logic.next_event_after_status_change(STATUS_SAFE, statuses) is None
+
+
+def test_eliminated_status_advances_the_week():
+    assert logic.is_week_advancing_status(STATUS_ELIMINATED) is True
+
+
+def test_hoh_status_does_not_advance_the_week():
+    assert logic.is_week_advancing_status(STATUS_HOH) is False
