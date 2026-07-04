@@ -15,7 +15,10 @@ from homeassistant.helpers.event import (
 from homeassistant.helpers.restore_state import RestoreEntity
 import homeassistant.util.dt as dt_util
 
+from . import logic
 from .const import (
+    ATTR_IS_HAVE_NOT,
+    ATTR_IS_JURY_MEMBER,
     CONF_HOUSEMATES,
     CONF_START_DATE,
     CONF_TIMEZONE,
@@ -49,15 +52,44 @@ async def async_setup_entry(
     house_day = BB28HouseDaySensor(entry)
     house_time = BB28HouseTimeSensor(entry)
     next_event = BB28NextEventSensor(entry)
+    week_number = BB28WeekNumberSensor(entry)
 
-    store["house_day_entity"] = house_day
+    housemate_entities: dict[str, BB28HousemateSensor] = store["housemate_entities"]
+
+    current_hoh = BB28CurrentHOHSensor(entry, housemate_entities)
+    current_have_nots = BB28CurrentHaveNotsSensor(entry, housemate_entities)
+    current_nominees = BB28CurrentNomineesSensor(entry, housemate_entities)
+    current_veto_competitors = BB28CurrentVetoCompetitorsSensor(
+        entry, housemate_entities
+    )
+    jury_members = BB28JuryMembersSensor(entry, housemate_entities)
+
     store["next_event_entity"] = next_event
+    store["house_day_entity"] = house_day
+    store["week_number_entity"] = week_number
+    store["aggregate_entities"] = [
+        current_hoh,
+        current_have_nots,
+        current_nominees,
+        current_veto_competitors,
+        jury_members,
+    ]
 
-    entities: list[SensorEntity] = [house_day, house_time, next_event]
+    entities: list[SensorEntity] = [
+        house_day,
+        house_time,
+        next_event,
+        week_number,
+        current_hoh,
+        current_have_nots,
+        current_nominees,
+        current_veto_competitors,
+        jury_members,
+    ]
 
     for name in entry.options.get(CONF_HOUSEMATES, []):
         housemate = BB28HousemateSensor(entry, name)
-        store["housemate_entities"][name] = housemate
+        housemate_entities[name] = housemate
         entities.append(housemate)
 
     async_add_entities(entities)
@@ -205,21 +237,245 @@ class BB28HousemateSensor(RestoreEntity, SensorEntity):
         self._attr_name = name
         self._attr_device_info = _device_info(entry)
         self._state = DEFAULT_HOUSEMATE_STATUS
+        self._have_not = False
+        self._jury_member = False
 
     @property
     def native_value(self) -> str:
         return self._state
 
     @property
+    def have_not(self) -> bool:
+        return self._have_not
+
+    @property
+    def jury_member(self) -> bool:
+        return self._jury_member
+
+    @property
     def extra_state_attributes(self) -> dict:
-        return {"housemate": self._name_value}
+        return {
+            "housemate": self._name_value,
+            ATTR_IS_HAVE_NOT: self._have_not,
+            ATTR_IS_JURY_MEMBER: self._jury_member,
+        }
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         last_state = await self.async_get_last_state()
         if last_state is not None and last_state.state is not None:
             self._state = last_state.state
+            self._have_not = bool(last_state.attributes.get(ATTR_IS_HAVE_NOT, False))
+            self._jury_member = bool(
+                last_state.attributes.get(ATTR_IS_JURY_MEMBER, False)
+            )
 
     def set_status(self, status: str) -> None:
         self._state = status
+        self.async_write_ha_state()
+
+    def set_have_not(self, is_have_not: bool) -> None:
+        self._have_not = is_have_not
+        self.async_write_ha_state()
+
+    def set_jury_status(self, is_jury_member: bool) -> None:
+        self._jury_member = is_jury_member
+        self.async_write_ha_state()
+
+
+class BB28WeekNumberSensor(RestoreEntity, SensorEntity):
+    """BB week counter - increments each time an eviction closes out a week."""
+
+    _attr_icon = "mdi:calendar-week"
+    _attr_entity_picture = ICON_STATIC_URL
+    _attr_should_poll = False
+
+    def __init__(self, entry: ConfigEntry) -> None:
+        self._entry = entry
+        self._attr_unique_id = f"{entry.entry_id}_week_number"
+        self._attr_name = "Week Number"
+        self._attr_device_info = _device_info(entry)
+        self._week = 1
+
+    @property
+    def native_value(self) -> int:
+        return self._week
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is not None and last_state.state is not None:
+            try:
+                self._week = int(last_state.state)
+            except ValueError:
+                pass
+
+    def advance_week(self) -> None:
+        self._week += 1
+        self.async_write_ha_state()
+
+
+class BB28CurrentHOHSensor(SensorEntity):
+    """Aggregate: name of whoever currently holds HOH."""
+
+    _attr_icon = "mdi:crown"
+    _attr_entity_picture = ICON_STATIC_URL
+    _attr_should_poll = False
+
+    def __init__(self, entry: ConfigEntry, housemate_entities: dict) -> None:
+        self._entry = entry
+        self._housemate_entities = housemate_entities
+        self._attr_unique_id = f"{entry.entry_id}_current_hoh"
+        self._attr_name = "Current HOH"
+        self._attr_device_info = _device_info(entry)
+
+    @property
+    def native_value(self) -> str:
+        statuses = {
+            name: entity.native_value
+            for name, entity in self._housemate_entities.items()
+        }
+        return logic.compute_current_hoh(statuses)
+
+    def refresh(self) -> None:
+        self.async_write_ha_state()
+
+
+class BB28CurrentNomineesSensor(SensorEntity):
+    """Aggregate: comma-joined list of currently nominated housemates."""
+
+    _attr_icon = "mdi:target-account"
+    _attr_entity_picture = ICON_STATIC_URL
+    _attr_should_poll = False
+
+    def __init__(self, entry: ConfigEntry, housemate_entities: dict) -> None:
+        self._entry = entry
+        self._housemate_entities = housemate_entities
+        self._attr_unique_id = f"{entry.entry_id}_current_nominees"
+        self._attr_name = "Current Nominees"
+        self._attr_device_info = _device_info(entry)
+
+    @property
+    def _names(self) -> list[str]:
+        statuses = {
+            name: entity.native_value
+            for name, entity in self._housemate_entities.items()
+        }
+        return logic.compute_nominees(statuses)
+
+    @property
+    def native_value(self) -> str:
+        return logic.join_names_or_none(self._names)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {"names": self._names}
+
+    def refresh(self) -> None:
+        self.async_write_ha_state()
+
+
+class BB28CurrentVetoCompetitorsSensor(SensorEntity):
+    """Aggregate: comma-joined list of housemates playing in this week's veto."""
+
+    _attr_icon = "mdi:shield-account"
+    _attr_entity_picture = ICON_STATIC_URL
+    _attr_should_poll = False
+
+    def __init__(self, entry: ConfigEntry, housemate_entities: dict) -> None:
+        self._entry = entry
+        self._housemate_entities = housemate_entities
+        self._attr_unique_id = f"{entry.entry_id}_current_veto_competitors"
+        self._attr_name = "Current Veto Competitors"
+        self._attr_device_info = _device_info(entry)
+
+    @property
+    def _names(self) -> list[str]:
+        statuses = {
+            name: entity.native_value
+            for name, entity in self._housemate_entities.items()
+        }
+        return logic.compute_veto_competitors(statuses)
+
+    @property
+    def native_value(self) -> str:
+        return logic.join_names_or_none(self._names)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {"names": self._names}
+
+    def refresh(self) -> None:
+        self.async_write_ha_state()
+
+
+class BB28CurrentHaveNotsSensor(SensorEntity):
+    """Aggregate: comma-joined list of housemates currently flagged have-not."""
+
+    _attr_icon = "mdi:food-off"
+    _attr_entity_picture = ICON_STATIC_URL
+    _attr_should_poll = False
+
+    def __init__(self, entry: ConfigEntry, housemate_entities: dict) -> None:
+        self._entry = entry
+        self._housemate_entities = housemate_entities
+        self._attr_unique_id = f"{entry.entry_id}_current_have_nots"
+        self._attr_name = "Current Have-Nots"
+        self._attr_device_info = _device_info(entry)
+
+    @property
+    def _names(self) -> list[str]:
+        flags = {
+            name: entity.have_not
+            for name, entity in self._housemate_entities.items()
+        }
+        return logic.compute_have_nots(flags)
+
+    @property
+    def native_value(self) -> str:
+        return logic.join_names_or_none(self._names)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {"names": self._names}
+
+    def refresh(self) -> None:
+        self.async_write_ha_state()
+
+
+class BB28JuryMembersSensor(SensorEntity):
+    """Aggregate: comma-joined list of eliminated housemates on the jury."""
+
+    _attr_icon = "mdi:gavel"
+    _attr_entity_picture = ICON_STATIC_URL
+    _attr_should_poll = False
+
+    def __init__(self, entry: ConfigEntry, housemate_entities: dict) -> None:
+        self._entry = entry
+        self._housemate_entities = housemate_entities
+        self._attr_unique_id = f"{entry.entry_id}_jury_members"
+        self._attr_name = "Jury Members"
+        self._attr_device_info = _device_info(entry)
+
+    @property
+    def _names(self) -> list[str]:
+        statuses = {
+            name: entity.native_value
+            for name, entity in self._housemate_entities.items()
+        }
+        jury_flags = {
+            name: entity.jury_member
+            for name, entity in self._housemate_entities.items()
+        }
+        return logic.compute_jury_members(statuses, jury_flags)
+
+    @property
+    def native_value(self) -> str:
+        return logic.join_names_or_none(self._names)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {"names": self._names}
+
+    def refresh(self) -> None:
         self.async_write_ha_state()
