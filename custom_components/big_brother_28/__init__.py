@@ -10,9 +10,12 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 
+from . import logic
 from .const import (
     ATTR_DETAIL,
     ATTR_EVENT_TYPE,
+    ATTR_IS_HAVE_NOT,
+    ATTR_IS_JURY_MEMBER,
     ATTR_NAME,
     ATTR_SCHEDULED_TIME,
     ATTR_STATUS,
@@ -20,11 +23,13 @@ from .const import (
     CONF_START_DATE,
     DOMAIN,
     EVENT_STATES,
-    ICON_STATIC_URL,
     HOUSEMATE_STATUSES,
+    ICON_STATIC_URL,
     SERVICE_ADD_HOUSEMATE,
     SERVICE_REMOVE_HOUSEMATE,
+    SERVICE_SET_HAVE_NOT,
     SERVICE_SET_HOUSEMATE_STATUS,
+    SERVICE_SET_JURY_STATUS,
     SERVICE_SET_NEXT_EVENT,
 )
 
@@ -45,6 +50,18 @@ SET_NEXT_EVENT_SCHEMA = vol.Schema(
         vol.Optional(ATTR_SCHEDULED_TIME): cv.string,
     }
 )
+SET_HAVE_NOT_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_NAME): cv.string,
+        vol.Required(ATTR_IS_HAVE_NOT): cv.boolean,
+    }
+)
+SET_JURY_STATUS_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_NAME): cv.string,
+        vol.Required(ATTR_IS_JURY_MEMBER): cv.boolean,
+    }
+)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -53,6 +70,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "housemate_entities": {},
         "next_event_entity": None,
         "house_day_entity": None,
+        "week_number_entity": None,
+        "aggregate_entities": [],
     }
 
     await _async_register_icon_path(hass)
@@ -82,6 +101,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
     await hass.config_entries.async_reload(entry.entry_id)
+
+
+def _refresh_aggregates(hass: HomeAssistant, entry_id: str) -> None:
+    for entity in hass.data[DOMAIN][entry_id]["aggregate_entities"]:
+        entity.refresh()
 
 
 def _async_register_services(hass: HomeAssistant) -> None:
@@ -118,11 +142,28 @@ def _async_register_services(hass: HomeAssistant) -> None:
         entry = await _get_entry(call)
         name = call.data[ATTR_NAME].strip()
         status = call.data[ATTR_STATUS]
-        entities = hass.data[DOMAIN][entry.entry_id]["housemate_entities"]
+        store = hass.data[DOMAIN][entry.entry_id]
+        entities = store["housemate_entities"]
         entity = entities.get(name)
         if entity is None:
             raise ValueError(f"No housemate sensor found for '{name}'")
+
         entity.set_status(status)
+
+        updated_statuses = {
+            housemate_name: housemate_entity.native_value
+            for housemate_name, housemate_entity in entities.items()
+        }
+        next_event_value = logic.next_event_after_status_change(
+            status, updated_statuses
+        )
+        if next_event_value is not None:
+            store["next_event_entity"].set_event(next_event_value)
+
+        if logic.is_week_advancing_status(status):
+            store["week_number_entity"].advance_week()
+
+        _refresh_aggregates(hass, entry.entry_id)
 
     async def set_next_event(call: ServiceCall) -> None:
         entry = await _get_entry(call)
@@ -134,6 +175,28 @@ def _async_register_services(hass: HomeAssistant) -> None:
             call.data.get(ATTR_DETAIL, ""),
             call.data.get(ATTR_SCHEDULED_TIME),
         )
+
+    async def set_have_not(call: ServiceCall) -> None:
+        entry = await _get_entry(call)
+        name = call.data[ATTR_NAME].strip()
+        is_have_not = call.data[ATTR_IS_HAVE_NOT]
+        entities = hass.data[DOMAIN][entry.entry_id]["housemate_entities"]
+        entity = entities.get(name)
+        if entity is None:
+            raise ValueError(f"No housemate sensor found for '{name}'")
+        entity.set_have_not(is_have_not)
+        _refresh_aggregates(hass, entry.entry_id)
+
+    async def set_jury_status(call: ServiceCall) -> None:
+        entry = await _get_entry(call)
+        name = call.data[ATTR_NAME].strip()
+        is_jury_member = call.data[ATTR_IS_JURY_MEMBER]
+        entities = hass.data[DOMAIN][entry.entry_id]["housemate_entities"]
+        entity = entities.get(name)
+        if entity is None:
+            raise ValueError(f"No housemate sensor found for '{name}'")
+        entity.set_jury_status(is_jury_member)
+        _refresh_aggregates(hass, entry.entry_id)
 
     hass.services.async_register(
         DOMAIN, SERVICE_ADD_HOUSEMATE, add_housemate, schema=ADD_HOUSEMATE_SCHEMA
@@ -152,4 +215,13 @@ def _async_register_services(hass: HomeAssistant) -> None:
     )
     hass.services.async_register(
         DOMAIN, SERVICE_SET_NEXT_EVENT, set_next_event, schema=SET_NEXT_EVENT_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_SET_HAVE_NOT, set_have_not, schema=SET_HAVE_NOT_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SET_JURY_STATUS,
+        set_jury_status,
+        schema=SET_JURY_STATUS_SCHEMA,
     )
