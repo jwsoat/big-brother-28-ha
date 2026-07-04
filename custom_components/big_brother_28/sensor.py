@@ -5,7 +5,7 @@ from datetime import date, timedelta
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import (
@@ -142,6 +142,7 @@ class BB28HouseDaySensor(SensorEntity):
             self.hass, self._handle_midnight, next_midnight
         )
 
+    @callback
     def _handle_midnight(self, _now) -> None:
         self.async_write_ha_state()
         self._schedule_next_midnight()
@@ -174,6 +175,7 @@ class BB28HouseTimeSensor(SensorEntity):
         if self._unsub:
             self._unsub()
 
+    @callback
     def _handle_tick(self, _now) -> None:
         self.async_write_ha_state()
 
