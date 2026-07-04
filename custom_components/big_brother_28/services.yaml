@@ -20,7 +20,10 @@ remove_housemate:
 
 set_housemate_status:
   name: Set housemate status
-  description: Update a housemate's current status.
+  description: >-
+    Update a housemate's current status. Also auto-advances the Next Event
+    sensor per the weekly cycle (HOH -> Nominations -> Veto Picks -> Veto ->
+    Live Show -> back to HOH).
   fields:
     name:
       required: true
@@ -34,13 +37,14 @@ set_housemate_status:
           options:
             - "HOH"
             - "Nominated"
-            - "Veto Player"
+            - "Veto Competitor"
+            - "Veto Winner"
             - "Safe"
             - "Eliminated"
 
 set_next_event:
   name: Set next event
-  description: Update the next upcoming event.
+  description: Manually override the next upcoming event.
   fields:
     event_type:
       required: true
@@ -48,10 +52,11 @@ set_next_event:
         select:
           options:
             - "HOH"
+            - "Nominations"
+            - "Veto Picks"
             - "Veto"
             - "Live Show"
             - "Eviction"
-            - "Nominations"
             - "Other"
     detail:
       required: false
@@ -63,3 +68,31 @@ set_next_event:
       example: "2026-07-10T20:00:00"
       selector:
         datetime:
+
+set_have_not:
+  name: Set have-not status
+  description: Toggle whether a housemate is currently a have-not.
+  fields:
+    name:
+      required: true
+      example: "Alex"
+      selector:
+        text:
+    is_have_not:
+      required: true
+      selector:
+        boolean:
+
+set_jury_status:
+  name: Set jury status
+  description: Toggle whether an eliminated housemate is on the jury.
+  fields:
+    name:
+      required: true
+      example: "Alex"
+      selector:
+        text:
+    is_jury_member:
+      required: true
+      selector:
+        boolean:
