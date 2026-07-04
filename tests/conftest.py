@@ -42,5 +42,4 @@ def _load_module(name: str, filename: str):
 
 _register_stub_package()
 _load_module("custom_components.big_brother_28.const", "const.py")
-if (COMPONENT_DIR / "logic.py").exists():
-    _load_module("custom_components.big_brother_28.logic", "logic.py")
+_load_module("custom_components.big_brother_28.logic", "logic.py")
