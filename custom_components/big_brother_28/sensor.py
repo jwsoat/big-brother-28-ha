@@ -43,6 +43,17 @@ def _device_info(entry: ConfigEntry) -> DeviceInfo:
     )
 
 
+def _housemate_device_info(entry: ConfigEntry, name: str) -> DeviceInfo:
+    slug = name.lower().replace(" ", "_")
+    return DeviceInfo(
+        identifiers={(DOMAIN, f"{entry.entry_id}_housemate_{slug}")},
+        name=name,
+        manufacturer="CBS",
+        model="Houseguest",
+        via_device=(DOMAIN, entry.entry_id),
+    )
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
@@ -237,7 +248,7 @@ class BB28HousemateSensor(RestoreEntity, SensorEntity):
         slug = name.lower().replace(" ", "_")
         self._attr_unique_id = f"{entry.entry_id}_housemate_{slug}"
         self._attr_name = name
-        self._attr_device_info = _device_info(entry)
+        self._attr_device_info = _housemate_device_info(entry, name)
         self._state = DEFAULT_HOUSEMATE_STATUS
         self._have_not = False
 
