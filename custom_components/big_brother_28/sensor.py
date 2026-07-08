@@ -18,7 +18,6 @@ import homeassistant.util.dt as dt_util
 from . import logic
 from .const import (
     ATTR_IS_HAVE_NOT,
-    ATTR_IS_JURY_MEMBER,
     CONF_HOUSEMATES,
     CONF_START_DATE,
     CONF_TIMEZONE,
@@ -67,6 +66,7 @@ async def async_setup_entry(
     store["next_event_entity"] = next_event
     store["house_day_entity"] = house_day
     store["week_number_entity"] = week_number
+    store["async_add_entities"] = async_add_entities
     store["aggregate_entities"] = [
         current_hoh,
         current_have_nots,
@@ -240,7 +240,6 @@ class BB28HousemateSensor(RestoreEntity, SensorEntity):
         self._attr_device_info = _device_info(entry)
         self._state = DEFAULT_HOUSEMATE_STATUS
         self._have_not = False
-        self._jury_member = False
 
     @property
     def native_value(self) -> str:
@@ -251,15 +250,10 @@ class BB28HousemateSensor(RestoreEntity, SensorEntity):
         return self._have_not
 
     @property
-    def jury_member(self) -> bool:
-        return self._jury_member
-
-    @property
     def extra_state_attributes(self) -> dict:
         return {
             "housemate": self._name_value,
             ATTR_IS_HAVE_NOT: self._have_not,
-            ATTR_IS_JURY_MEMBER: self._jury_member,
         }
 
     async def async_added_to_hass(self) -> None:
@@ -268,9 +262,6 @@ class BB28HousemateSensor(RestoreEntity, SensorEntity):
         if last_state is not None and last_state.state is not None:
             self._state = logic.normalize_restored_status(last_state.state)
             self._have_not = bool(last_state.attributes.get(ATTR_IS_HAVE_NOT, False))
-            self._jury_member = bool(
-                last_state.attributes.get(ATTR_IS_JURY_MEMBER, False)
-            )
 
     def set_status(self, status: str) -> None:
         self._state = status
@@ -278,10 +269,6 @@ class BB28HousemateSensor(RestoreEntity, SensorEntity):
 
     def set_have_not(self, is_have_not: bool) -> None:
         self._have_not = is_have_not
-        self.async_write_ha_state()
-
-    def set_jury_status(self, is_jury_member: bool) -> None:
-        self._jury_member = is_jury_member
         self.async_write_ha_state()
 
 
@@ -465,11 +452,7 @@ class BB28JuryMembersSensor(SensorEntity):
             name: entity.native_value
             for name, entity in self._housemate_entities.items()
         }
-        jury_flags = {
-            name: entity.jury_member
-            for name, entity in self._housemate_entities.items()
-        }
-        return logic.compute_jury_members(statuses, jury_flags)
+        return logic.compute_jury_members(statuses)
 
     @property
     def native_value(self) -> str:

@@ -11,11 +11,11 @@ from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 
 from . import logic
+from .sensor import BB28HousemateSensor
 from .const import (
     ATTR_DETAIL,
     ATTR_EVENT_TYPE,
     ATTR_IS_HAVE_NOT,
-    ATTR_IS_JURY_MEMBER,
     ATTR_NAME,
     ATTR_SCHEDULED_TIME,
     ATTR_STATUS,
@@ -29,7 +29,6 @@ from .const import (
     SERVICE_REMOVE_HOUSEMATE,
     SERVICE_SET_HAVE_NOT,
     SERVICE_SET_HOUSEMATE_STATUS,
-    SERVICE_SET_JURY_STATUS,
     SERVICE_SET_NEXT_EVENT,
 )
 
@@ -54,12 +53,6 @@ SET_HAVE_NOT_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_NAME): cv.string,
         vol.Required(ATTR_IS_HAVE_NOT): cv.boolean,
-    }
-)
-SET_JURY_STATUS_SCHEMA = vol.Schema(
-    {
-        vol.Required(ATTR_NAME): cv.string,
-        vol.Required(ATTR_IS_JURY_MEMBER): cv.boolean,
     }
 )
 
@@ -108,11 +101,29 @@ def _refresh_aggregates(hass: HomeAssistant, entry_id: str) -> None:
         entity.refresh()
 
 
-def _get_housemate_entity(hass: HomeAssistant, entry_id: str, name: str):
-    entities = hass.data[DOMAIN][entry_id]["housemate_entities"]
+def _ensure_housemate_entity(hass: HomeAssistant, entry: ConfigEntry, name: str):
+    """Get the housemate sensor for `name`, auto-creating it (live + persisted) if new.
+
+    Lets set_housemate_status/set_have_not/set_jury_status double as an implicit
+    "add housemate" for callers (e.g. the daily-recap automation) that only know
+    a name showed up in a confirmed fact and never call add_housemate themselves.
+    """
+    store = hass.data[DOMAIN][entry.entry_id]
+    entities = store["housemate_entities"]
     entity = entities.get(name)
-    if entity is None:
-        raise ValueError(f"No housemate sensor found for '{name}'")
+    if entity is not None:
+        return entity
+
+    entity = BB28HousemateSensor(entry, name)
+    entities[name] = entity
+    store["async_add_entities"]([entity])
+
+    housemates = list(entry.options.get(CONF_HOUSEMATES, []))
+    if name not in housemates:
+        housemates.append(name)
+        hass.config_entries.async_update_entry(
+            entry, options={**entry.options, CONF_HOUSEMATES: housemates}
+        )
     return entity
 
 
@@ -151,7 +162,7 @@ def _async_register_services(hass: HomeAssistant) -> None:
         name = call.data[ATTR_NAME].strip()
         status = call.data[ATTR_STATUS]
         store = hass.data[DOMAIN][entry.entry_id]
-        entity = _get_housemate_entity(hass, entry.entry_id, name)
+        entity = _ensure_housemate_entity(hass, entry, name)
 
         entity.set_status(status)
 
@@ -185,16 +196,8 @@ def _async_register_services(hass: HomeAssistant) -> None:
         entry = await _get_entry(call)
         name = call.data[ATTR_NAME].strip()
         is_have_not = call.data[ATTR_IS_HAVE_NOT]
-        entity = _get_housemate_entity(hass, entry.entry_id, name)
+        entity = _ensure_housemate_entity(hass, entry, name)
         entity.set_have_not(is_have_not)
-        _refresh_aggregates(hass, entry.entry_id)
-
-    async def set_jury_status(call: ServiceCall) -> None:
-        entry = await _get_entry(call)
-        name = call.data[ATTR_NAME].strip()
-        is_jury_member = call.data[ATTR_IS_JURY_MEMBER]
-        entity = _get_housemate_entity(hass, entry.entry_id, name)
-        entity.set_jury_status(is_jury_member)
         _refresh_aggregates(hass, entry.entry_id)
 
     hass.services.async_register(
@@ -217,10 +220,4 @@ def _async_register_services(hass: HomeAssistant) -> None:
     )
     hass.services.async_register(
         DOMAIN, SERVICE_SET_HAVE_NOT, set_have_not, schema=SET_HAVE_NOT_SCHEMA
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_SET_JURY_STATUS,
-        set_jury_status,
-        schema=SET_JURY_STATUS_SCHEMA,
     )

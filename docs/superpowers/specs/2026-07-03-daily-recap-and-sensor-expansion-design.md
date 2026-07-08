@@ -18,16 +18,16 @@ The two are decoupled: the HA integration works standalone (as it does today, vi
 `HOUSEMATE_STATUSES` becomes:
 
 ```
-HOH, Nominated, Veto Competitor, Veto Winner, Safe, Eliminated
+HOH, Nominated, Veto Competitor, Veto Winner, Safe, Eliminated, Jury
 ```
 
 - `Veto Winner` = current POV holder/winner (existing meaning, unchanged).
 - `Veto Competitor` = new. Only applies to housemates playing in that week's veto competition who are **not** already HOH or Nominated (those two already imply participation, so they keep their existing status rather than being overwritten).
+- `Jury` = new. Set via the same `set_housemate_status` service once an evicted housemate enters the jury — a normal status transition, not a separate boolean flag, so the sensor's own state always says what's actually true of the housemate. `set_housemate_status`/`set_have_not` auto-create the housemate's sensor the first time a fact arrives for a name that isn't tracked yet (live + persisted to config options), so nothing needs to pre-register a housemate before pushing its first fact.
 
-### Extra per-housemate attributes (not statuses — coexist with the main status)
+### Extra per-housemate attribute (not a status — coexists with the main status)
 
-- `have_not: bool` — food/lifestyle restriction, independent of game status. Toggled via new service `big_brother_28.set_have_not` (`name`, `is_have_not`).
-- `jury_member: bool` — only meaningful once a housemate is `Eliminated`; distinguishes jury-phase boots from pre-jury boots. Toggled via new service `big_brother_28.set_jury_status` (`name`, `is_jury_member`).
+- `have_not: bool` — food/lifestyle restriction, independent of game status. Toggled via service `big_brother_28.set_have_not` (`name`, `is_have_not`).
 
 ### Event cycle (`next_event` auto-advance)
 
@@ -57,7 +57,7 @@ All computed from existing housemate entity state; each recomputes and calls `as
 - `sensor.current_have_nots` — comma-joined names of housemates with `have_not=True`, or `"None"`.
 - `sensor.current_nominees` — comma-joined names of housemates with status `Nominated`.
 - `sensor.current_veto_competitors` — comma-joined names of housemates with status `Veto Competitor` (does not include the HOH/nominees who are also playing but keep their own status).
-- `sensor.jury_members` — comma-joined names of housemates with status `Eliminated` and `jury_member=True`.
+- `sensor.jury_members` — comma-joined names of housemates with status `Jury`.
 - `sensor.week_number` — integer counter, `RestoreEntity`, starts at 1, increments by 1 each time the auto-advance cycle fires the `Eliminated -> HOH` transition (i.e. each week closes with an eviction).
 
 ## 2. New Project: `bb28-daily-recap`
@@ -94,8 +94,8 @@ X requires an authenticated session for reliable access in 2026 — a dedicated 
 
 1. **Fetch**: log in as the burner account and pull last-24h posts from all 7 X accounts; in parallel, fetch and filter the 3 RSS feeds to entries from the last 24h.
 2. **Aggregate**: merge X posts + RSS entries into one raw timestamped feed for the day, tagged by source.
-3. **Extract** (Claude call #1): given the raw feed, produce structured JSON of only clearly-stated facts (who won HOH, who's nominated, who's playing/won veto, who got evicted, have-not results) — each fact tagged with which source(s) stated it. Ambiguous/speculative chatter produces no fact.
-4. **Push to HA**: for each extracted fact, call the matching HA service over REST (`POST {HA_BASE_URL}/api/services/big_brother_28/<service>`, authenticated with a long-lived access token) — `set_housemate_status`, `set_have_not`, `set_jury_status`, or `set_next_event` as an override where relevant. Failures (network/auth) are logged and skipped; they never block steps 5–6.
+3. **Extract** (Claude call #1): given the raw feed, produce structured JSON of only clearly-stated facts (who won HOH, who's nominated, who's playing/won veto, who got evicted, who entered the jury, have-not results) — each fact tagged with which source(s) stated it. Ambiguous/speculative chatter produces no fact.
+4. **Push to HA**: for each extracted fact, call the matching HA service over REST (`POST {HA_BASE_URL}/api/services/big_brother_28/<service>`, authenticated with a long-lived access token) — `set_housemate_status` (covers HOH/Nominated/Veto Competitor/Veto Winner/Eliminated/Jury), `set_have_not`, or `set_next_event` as an override where relevant. A housemate's sensor is auto-created on first push if it doesn't exist yet — no separate "add housemate" step needed. Failures (network/auth) are logged and skipped; they never block steps 5–6.
 5. **Summarize** (Claude call #2): given the same raw feed (plus the facts extracted in step 3 for consistency), produce a segmented talking-points outline sized for 60+ minutes of live commentary: Overnight Recap, HOH/Nominations, Veto, Showmances, House Drama, Predictions/Wrap-up. Talking points, not a word-for-word script.
 6. **Email**: send the outline via Resend to `info@jwsoat.com`, subject `BB28 Daily Recap — Day N` (day number computed locally from the same `2026-07-09` start date, in `America/Los_Angeles`). The email also lists what got auto-applied to HA in step 4 (e.g. "Auto-updated: Alex → Eliminated, per @hamsterwatch") so the user can visually confirm or correct via the existing HA services if a fact was wrong.
 
@@ -110,11 +110,11 @@ X requires an authenticated session for reliable access in 2026 — a dedicated 
 
 ## Implementation order
 
-The Vercel project's HA-push step depends on the new services (`set_have_not`, `set_jury_status`) and statuses (`Veto Competitor`) existing first. Build and ship the HA integration changes (section 1) before starting the Vercel project (section 2).
+The Vercel project's HA-push step depends on the new service (`set_have_not`) and statuses (`Veto Competitor`, `Jury`) existing first. Build and ship the HA integration changes (section 1) before starting the Vercel project (section 2).
 
 ## Out of scope (for this spec)
 
-- Full jury-vote modeling beyond the `jury_member` flag.
+- Full jury-vote modeling beyond the `Jury` status.
 - Any data source besides the 7 named X accounts and 3 named RSS feeds (no Facebook sources were ultimately provided).
 - Retry/secondary delivery if the daily email fails to send.
 - Historical archive/searchable log of past daily recaps.

@@ -19,7 +19,7 @@
 - Recipient email: `info@jwsoat.com`. Subject format: `BB28 Daily Recap — Day N`.
 - A source (X account or RSS feed) returning zero fresh items must produce a visible warning in the email, never a silent gap.
 - HA push failures per-fact must be logged/skipped, never abort the summarize/email steps.
-- Housemate statuses pushed to HA must be one of: `HOH`, `Nominated`, `Veto Competitor`, `Veto Winner`, `Eliminated` (from Plan 1's `HOUSEMATE_STATUSES` — `Safe` is a default, never an extracted fact).
+- Housemate statuses pushed to HA must be one of: `HOH`, `Nominated`, `Veto Competitor`, `Veto Winner`, `Eliminated`, `Jury` (from Plan 1's `HOUSEMATE_STATUSES` — `Safe` is a default, never an extracted fact). Jury is a normal status value, not a separate boolean fact — Plan 1's `set_housemate_status` handles it like any other status and auto-creates the housemate sensor if it's the first fact seen for that name.
 - Extraction must only produce a fact when clearly and unambiguously stated — no guessing from jokes/speculation.
 - New public GitHub repo for this project (per prior decision), default name `bb28-daily-recap` unless told otherwise.
 - Secrets (Vercel env vars, never committed): `X_BURNER_USERNAME`, `X_BURNER_PASSWORD`, `X_BURNER_EMAIL`, `ANTHROPIC_API_KEY`, `RESEND_API_KEY`, `HA_BASE_URL`, `HA_LONG_LIVED_TOKEN`.
@@ -169,10 +169,10 @@ class SourceResult:
 
 @dataclass(frozen=True)
 class Fact:
-    fact_type: str  # "status" | "have_not" | "jury"
+    fact_type: str  # "status" | "have_not"
     housemate: str = ""
-    status: str = ""  # only set when fact_type == "status"
-    value: bool | None = None  # only set when fact_type in ("have_not", "jury")
+    status: str = ""  # only set when fact_type == "status" (includes "Jury")
+    value: bool | None = None  # only set when fact_type == "have_not"
     sources: list[str] = field(default_factory=list)
 
 
@@ -719,13 +719,13 @@ def test_parse_extraction_response_parses_have_not_fact():
     assert facts[0].value is True
 
 
-def test_parse_extraction_response_parses_jury_fact():
+def test_parse_extraction_response_parses_jury_as_a_status_fact():
     response = json.dumps(
-        [{"housemate": "Sam", "fact_type": "jury", "value": True, "sources": ["x:a"]}]
+        [{"housemate": "Sam", "fact_type": "status", "status": "Jury", "sources": ["x:a"]}]
     )
     facts = parse_extraction_response(response)
-    assert facts[0].fact_type == "jury"
-    assert facts[0].value is True
+    assert facts[0].fact_type == "status"
+    assert facts[0].status == "Jury"
 
 
 def test_parse_extraction_response_empty_array_returns_empty_list():
@@ -770,10 +770,10 @@ EXTRACTION_SYSTEM_PROMPT = (
     "Only extract a fact if it is clearly and unambiguously stated as having happened - "
     "never guess, infer from jokes, or extract speculation/predictions. "
     "Return ONLY a JSON array, no other text. Each element must have exactly these keys: "
-    '"housemate" (string), "fact_type" (one of "status", "have_not", "jury"), '
+    '"housemate" (string), "fact_type" (one of "status", "have_not"), '
     '"status" (string, required when fact_type is "status", one of: HOH, Nominated, '
-    'Veto Competitor, Veto Winner, Eliminated - omit for other fact_types), '
-    '"value" (boolean, required when fact_type is "have_not" or "jury" - omit for "status"), '
+    'Veto Competitor, Veto Winner, Eliminated, Jury - omit for "have_not"), '
+    '"value" (boolean, required when fact_type is "have_not" - omit for "status"), '
     '"sources" (array of strings - which source tags in the feed stated this fact). '
     "If no facts are clearly stated, return an empty array []."
 )
@@ -806,7 +806,7 @@ def parse_extraction_response(response_text: str) -> list[Fact]:
     facts = []
     for item in raw_facts:
         fact_type = item.get("fact_type")
-        if fact_type not in ("status", "have_not", "jury"):
+        if fact_type not in ("status", "have_not"):
             raise InvalidExtractionResponseError(f"Unknown fact_type: {fact_type!r}")
         facts.append(
             Fact(
@@ -898,14 +898,14 @@ def test_build_ha_service_calls_maps_have_not_fact():
     ]
 
 
-def test_build_ha_service_calls_maps_jury_fact():
-    facts = [Fact(fact_type="jury", housemate="Sam", value=True)]
+def test_build_ha_service_calls_maps_jury_as_status_fact():
+    facts = [Fact(fact_type="status", housemate="Sam", status="Jury", sources=["x:a"])]
     calls = build_ha_service_calls(facts)
     assert calls == [
         HAServiceCall(
             domain="big_brother_28",
-            service="set_jury_status",
-            data={"name": "Sam", "is_jury_member": True},
+            service="set_housemate_status",
+            data={"name": "Sam", "status": "Jury"},
         )
     ]
 
@@ -971,14 +971,6 @@ def build_ha_service_calls(facts: list[Fact]) -> list[HAServiceCall]:
                     domain="big_brother_28",
                     service="set_have_not",
                     data={"name": fact.housemate, "is_have_not": bool(fact.value)},
-                )
-            )
-        elif fact.fact_type == "jury":
-            calls.append(
-                HAServiceCall(
-                    domain="big_brother_28",
-                    service="set_jury_status",
-                    data={"name": fact.housemate, "is_jury_member": bool(fact.value)},
                 )
             )
     return calls
@@ -1247,8 +1239,6 @@ def render_applied_updates(push_results: list[PushResult]) -> str:
             lines.append(f"Auto-updated: {data['name']} → {data['status']}")
         elif result.call.service == "set_have_not":
             lines.append(f"Auto-updated: {data['name']} have-not → {data['is_have_not']}")
-        elif result.call.service == "set_jury_status":
-            lines.append(f"Auto-updated: {data['name']} jury → {data['is_jury_member']}")
     if not lines:
         return "No sensor updates applied today."
     return "\n".join(lines)

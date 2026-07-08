@@ -41,6 +41,7 @@ set_housemate_status:
             - "Veto Winner"
             - "Safe"
             - "Eliminated"
+            - "Jury"
 
 set_next_event:
   name: Set next event
@@ -79,20 +80,6 @@ set_have_not:
       selector:
         text:
     is_have_not:
-      required: true
-      selector:
-        boolean:
-
-set_jury_status:
-  name: Set jury status
-  description: Toggle whether an eliminated housemate is on the jury.
-  fields:
-    name:
-      required: true
-      example: "Alex"
-      selector:
-        text:
-    is_jury_member:
       required: true
       selector:
         boolean:

@@ -19,6 +19,7 @@ STATUS_VETO_COMPETITOR = "Veto Competitor"
 STATUS_VETO_WINNER = "Veto Winner"
 STATUS_SAFE = "Safe"
 STATUS_ELIMINATED = "Eliminated"
+STATUS_JURY = "Jury"
 
 HOUSEMATE_STATUSES = [
     STATUS_HOH,
@@ -27,6 +28,7 @@ HOUSEMATE_STATUSES = [
     STATUS_VETO_WINNER,
     STATUS_SAFE,
     STATUS_ELIMINATED,
+    STATUS_JURY,
 ]
 
 DEFAULT_HOUSEMATE_STATUS = STATUS_SAFE
@@ -57,7 +59,6 @@ SERVICE_REMOVE_HOUSEMATE = "remove_housemate"
 SERVICE_SET_HOUSEMATE_STATUS = "set_housemate_status"
 SERVICE_SET_NEXT_EVENT = "set_next_event"
 SERVICE_SET_HAVE_NOT = "set_have_not"
-SERVICE_SET_JURY_STATUS = "set_jury_status"
 
 ATTR_NAME = "name"
 ATTR_STATUS = "status"
@@ -65,7 +66,6 @@ ATTR_EVENT_TYPE = "event_type"
 ATTR_DETAIL = "detail"
 ATTR_SCHEDULED_TIME = "scheduled_time"
 ATTR_IS_HAVE_NOT = "is_have_not"
-ATTR_IS_JURY_MEMBER = "is_jury_member"
 
 SIGNAL_HOUSEMATES_UPDATED = f"{DOMAIN}_housemates_updated"
 

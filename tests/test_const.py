@@ -14,11 +14,14 @@ def test_veto_picks_event_state_exists():
     assert const.EVENT_VETO_PICKS in const.EVENT_STATES
 
 
-def test_have_not_and_jury_attrs_exist():
+def test_have_not_attr_exists():
     assert const.ATTR_IS_HAVE_NOT == "is_have_not"
-    assert const.ATTR_IS_JURY_MEMBER == "is_jury_member"
 
 
-def test_have_not_and_jury_services_exist():
+def test_have_not_service_exists():
     assert const.SERVICE_SET_HAVE_NOT == "set_have_not"
-    assert const.SERVICE_SET_JURY_STATUS == "set_jury_status"
+
+
+def test_jury_is_a_housemate_status():
+    assert const.STATUS_JURY == "Jury"
+    assert const.STATUS_JURY in const.HOUSEMATE_STATUSES

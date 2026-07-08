@@ -9,6 +9,7 @@ from custom_components.big_brother_28.const import (
     EVENT_VETO_PICKS,
     STATUS_ELIMINATED,
     STATUS_HOH,
+    STATUS_JURY,
     STATUS_NOMINATED,
     STATUS_SAFE,
     STATUS_VETO_COMPETITOR,
@@ -57,14 +58,13 @@ def test_compute_have_nots_returns_flagged_names():
     assert sorted(logic.compute_have_nots(flags)) == ["Alex", "Sam"]
 
 
-def test_compute_jury_members_requires_eliminated_and_flag():
+def test_compute_jury_members_returns_only_jury_status():
     statuses = {
-        "Alex": STATUS_ELIMINATED,
+        "Alex": STATUS_JURY,
         "Jordan": STATUS_ELIMINATED,
         "Sam": STATUS_SAFE,
     }
-    jury_flags = {"Alex": True, "Jordan": False, "Sam": True}
-    assert logic.compute_jury_members(statuses, jury_flags) == ["Alex"]
+    assert logic.compute_jury_members(statuses) == ["Alex"]
 
 
 def test_hoh_status_advances_to_nominations():
@@ -112,6 +112,12 @@ def test_eliminated_status_advances_the_week():
 
 def test_hoh_status_does_not_advance_the_week():
     assert logic.is_week_advancing_status(STATUS_HOH) is False
+
+
+def test_jury_status_does_not_advance_event_or_week():
+    statuses = {"Alex": STATUS_JURY}
+    assert logic.next_event_after_status_change(STATUS_JURY, statuses) is None
+    assert logic.is_week_advancing_status(STATUS_JURY) is False
 
 
 def test_normalize_restored_status_maps_legacy_veto_player():

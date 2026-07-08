@@ -11,6 +11,7 @@ from .const import (
     HOUSEMATE_STATUSES,
     STATUS_ELIMINATED,
     STATUS_HOH,
+    STATUS_JURY,
     STATUS_NOMINATED,
     STATUS_VETO_COMPETITOR,
     STATUS_VETO_WINNER,
@@ -44,14 +45,8 @@ def compute_have_nots(have_not_flags: dict[str, bool]) -> list[str]:
     return [name for name, is_have_not in have_not_flags.items() if is_have_not]
 
 
-def compute_jury_members(
-    statuses: dict[str, str], jury_flags: dict[str, bool]
-) -> list[str]:
-    return [
-        name
-        for name, status in statuses.items()
-        if status == STATUS_ELIMINATED and jury_flags.get(name, False)
-    ]
+def compute_jury_members(statuses: dict[str, str]) -> list[str]:
+    return [name for name, status in statuses.items() if status == STATUS_JURY]
 
 
 def next_event_after_status_change(
