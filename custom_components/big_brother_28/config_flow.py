@@ -5,6 +5,7 @@ import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.core import callback
+from homeassistant.helpers import selector
 
 from .const import (
     CONF_HOUSEMATES,
@@ -39,7 +40,9 @@ class BigBrother28ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         schema = vol.Schema(
             {
-                vol.Required(CONF_START_DATE, default=DEFAULT_START_DATE): str,
+                vol.Required(
+                    CONF_START_DATE, default=DEFAULT_START_DATE
+                ): selector.DateSelector(),
                 vol.Required(CONF_TIMEZONE, default=DEFAULT_TIMEZONE): str,
             }
         )
@@ -78,7 +81,7 @@ class BigBrother28OptionsFlow(config_entries.OptionsFlow):
                 vol.Required(
                     CONF_START_DATE,
                     default=options.get(CONF_START_DATE, DEFAULT_START_DATE),
-                ): str,
+                ): selector.DateSelector(),
                 vol.Required(
                     CONF_TIMEZONE,
                     default=options.get(CONF_TIMEZONE, DEFAULT_TIMEZONE),

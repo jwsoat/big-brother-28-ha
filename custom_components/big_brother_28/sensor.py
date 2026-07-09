@@ -97,8 +97,12 @@ async def async_setup_entry(
         jury_members,
     ]
 
+    def _refresh_aggregates() -> None:
+        for aggregate in store["aggregate_entities"]:
+            aggregate.refresh()
+
     for name in entry.options.get(CONF_HOUSEMATES, []):
-        housemate = BB28HousemateSensor(entry, name)
+        housemate = BB28HousemateSensor(entry, name, on_restored=_refresh_aggregates)
         housemate_entities[name] = housemate
         entities.append(housemate)
 
@@ -241,7 +245,9 @@ class BB28HousemateSensor(RestoreEntity, SensorEntity):
     _attr_entity_picture = ICON_STATIC_URL
     _attr_should_poll = False
 
-    def __init__(self, entry: ConfigEntry, name: str) -> None:
+    def __init__(
+        self, entry: ConfigEntry, name: str, on_restored=None
+    ) -> None:
         self._entry = entry
         self._name_value = name
         slug = name.lower().replace(" ", "_")
@@ -250,6 +256,7 @@ class BB28HousemateSensor(RestoreEntity, SensorEntity):
         self._attr_device_info = _housemate_device_info(entry)
         self._state = DEFAULT_HOUSEMATE_STATUS
         self._have_not = False
+        self._on_restored = on_restored
 
     @property
     def native_value(self) -> str:
@@ -272,6 +279,13 @@ class BB28HousemateSensor(RestoreEntity, SensorEntity):
         if last_state is not None and last_state.state is not None:
             self._state = logic.normalize_restored_status(last_state.state)
             self._have_not = bool(last_state.attributes.get(ATTR_IS_HAVE_NOT, False))
+        # Aggregate sensors (current_hoh, etc.) snapshot every housemate's status
+        # when THEY are added, which races ahead of each housemate's own restore
+        # above - without this, a reload/restart leaves the aggregates stuck
+        # showing everyone as the pre-restore default until the next explicit
+        # set_housemate_status/set_have_not call. Nudge them once restore lands.
+        if self._on_restored is not None:
+            self._on_restored()
 
     def set_status(self, status: str) -> None:
         self._state = status
