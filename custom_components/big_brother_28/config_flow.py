@@ -48,14 +48,11 @@ class BigBrother28ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     def async_get_options_flow(config_entry):
-        return BigBrother28OptionsFlow(config_entry)
+        return BigBrother28OptionsFlow()
 
 
 class BigBrother28OptionsFlow(config_entries.OptionsFlow):
     """Handle options — edit start date and housemate roster."""
-
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        self.config_entry = config_entry
 
     async def async_step_init(self, user_input=None):
         errors: dict[str, str] = {}
