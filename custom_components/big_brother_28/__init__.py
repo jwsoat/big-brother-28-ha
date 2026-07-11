@@ -51,7 +51,7 @@ SET_NEXT_EVENT_SCHEMA = vol.Schema(
 )
 SET_HAVE_NOT_SCHEMA = vol.Schema(
     {
-        vol.Required(ATTR_NAME): cv.string,
+        vol.Required(ATTR_NAME): vol.All(cv.ensure_list, [cv.string]),
         vol.Required(ATTR_IS_HAVE_NOT): cv.boolean,
     }
 )
@@ -194,10 +194,13 @@ def _async_register_services(hass: HomeAssistant) -> None:
 
     async def set_have_not(call: ServiceCall) -> None:
         entry = await _get_entry(call)
-        name = call.data[ATTR_NAME].strip()
         is_have_not = call.data[ATTR_IS_HAVE_NOT]
-        entity = _ensure_housemate_entity(hass, entry, name)
-        entity.set_have_not(is_have_not)
+        for raw_name in call.data[ATTR_NAME]:
+            name = raw_name.strip()
+            if not name:
+                continue
+            entity = _ensure_housemate_entity(hass, entry, name)
+            entity.set_have_not(is_have_not)
         _refresh_aggregates(hass, entry.entry_id)
 
     hass.services.async_register(

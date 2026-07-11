@@ -72,7 +72,9 @@ set_next_event:
 
 set_have_not:
   name: Set have-not status
-  description: Toggle whether a housemate is currently a have-not.
+  description: >-
+    Toggle have-not status for one housemate or a list of housemates. In YAML,
+    `name` accepts either a single string or a list (e.g. [Alex, Jordan]).
   fields:
     name:
       required: true
