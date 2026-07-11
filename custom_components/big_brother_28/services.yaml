@@ -1,6 +1,8 @@
 add_housemate:
   name: Add housemate
-  description: Add a housemate and create their status sensor.
+  description: >-
+    Add one housemate or a list of housemates. In YAML, `name` accepts either
+    a single string or a list (e.g. [Alex, Jordan]).
   fields:
     name:
       required: true
@@ -10,7 +12,9 @@ add_housemate:
 
 remove_housemate:
   name: Remove housemate
-  description: Remove a housemate's status sensor.
+  description: >-
+    Remove one housemate or a list of housemates. In YAML, `name` accepts
+    either a single string or a list.
   fields:
     name:
       required: true
@@ -21,9 +25,10 @@ remove_housemate:
 set_housemate_status:
   name: Set housemate status
   description: >-
-    Update a housemate's current status. Also auto-advances the Next Event
-    sensor per the weekly cycle (HOH -> Nominations -> Veto Picks -> Veto ->
-    Live Show -> back to HOH).
+    Update one housemate's current status, or apply the same status to a list
+    of housemates. `name` accepts either a single string or a YAML list. Also
+    auto-advances the Next Event sensor per the weekly cycle
+    (HOH -> Nominations -> Veto Picks -> Veto -> Live Show -> back to HOH).
   fields:
     name:
       required: true

@@ -34,11 +34,13 @@ from .const import (
 
 PLATFORMS = ["sensor"]
 
-ADD_HOUSEMATE_SCHEMA = vol.Schema({vol.Required(ATTR_NAME): cv.string})
-REMOVE_HOUSEMATE_SCHEMA = vol.Schema({vol.Required(ATTR_NAME): cv.string})
+_NAME_OR_LIST = vol.All(cv.ensure_list, [cv.string])
+
+ADD_HOUSEMATE_SCHEMA = vol.Schema({vol.Required(ATTR_NAME): _NAME_OR_LIST})
+REMOVE_HOUSEMATE_SCHEMA = vol.Schema({vol.Required(ATTR_NAME): _NAME_OR_LIST})
 SET_HOUSEMATE_STATUS_SCHEMA = vol.Schema(
     {
-        vol.Required(ATTR_NAME): cv.string,
+        vol.Required(ATTR_NAME): _NAME_OR_LIST,
         vol.Required(ATTR_STATUS): vol.In(HOUSEMATE_STATUSES),
     }
 )
@@ -51,7 +53,7 @@ SET_NEXT_EVENT_SCHEMA = vol.Schema(
 )
 SET_HAVE_NOT_SCHEMA = vol.Schema(
     {
-        vol.Required(ATTR_NAME): vol.All(cv.ensure_list, [cv.string]),
+        vol.Required(ATTR_NAME): _NAME_OR_LIST,
         vol.Required(ATTR_IS_HAVE_NOT): cv.boolean,
     }
 )
@@ -137,12 +139,24 @@ def _async_register_services(hass: HomeAssistant) -> None:
             raise ValueError("Big Brother 28 is not configured")
         return entries[0]
 
+    def _clean_names(raw_names) -> list[str]:
+        seen: list[str] = []
+        for raw in raw_names:
+            name = raw.strip()
+            if name and name not in seen:
+                seen.append(name)
+        return seen
+
     async def add_housemate(call: ServiceCall) -> None:
         entry = await _get_entry(call)
-        name = call.data[ATTR_NAME].strip()
+        names = _clean_names(call.data[ATTR_NAME])
         housemates = list(entry.options.get(CONF_HOUSEMATES, []))
-        if name not in housemates:
-            housemates.append(name)
+        added = False
+        for name in names:
+            if name not in housemates:
+                housemates.append(name)
+                added = True
+        if added:
             hass.config_entries.async_update_entry(
                 entry,
                 options={**entry.options, CONF_HOUSEMATES: housemates},
@@ -150,8 +164,8 @@ def _async_register_services(hass: HomeAssistant) -> None:
 
     async def remove_housemate(call: ServiceCall) -> None:
         entry = await _get_entry(call)
-        name = call.data[ATTR_NAME].strip()
-        housemates = [h for h in entry.options.get(CONF_HOUSEMATES, []) if h != name]
+        names = set(_clean_names(call.data[ATTR_NAME]))
+        housemates = [h for h in entry.options.get(CONF_HOUSEMATES, []) if h not in names]
         hass.config_entries.async_update_entry(
             entry,
             options={**entry.options, CONF_HOUSEMATES: housemates},
@@ -159,12 +173,15 @@ def _async_register_services(hass: HomeAssistant) -> None:
 
     async def set_housemate_status(call: ServiceCall) -> None:
         entry = await _get_entry(call)
-        name = call.data[ATTR_NAME].strip()
         status = call.data[ATTR_STATUS]
         store = hass.data[DOMAIN][entry.entry_id]
-        entity = _ensure_housemate_entity(hass, entry, name)
+        names = _clean_names(call.data[ATTR_NAME])
+        if not names:
+            return
 
-        entity.set_status(status)
+        for name in names:
+            entity = _ensure_housemate_entity(hass, entry, name)
+            entity.set_status(status)
 
         updated_statuses = {
             housemate_name: housemate_entity.native_value
@@ -195,10 +212,7 @@ def _async_register_services(hass: HomeAssistant) -> None:
     async def set_have_not(call: ServiceCall) -> None:
         entry = await _get_entry(call)
         is_have_not = call.data[ATTR_IS_HAVE_NOT]
-        for raw_name in call.data[ATTR_NAME]:
-            name = raw_name.strip()
-            if not name:
-                continue
+        for name in _clean_names(call.data[ATTR_NAME]):
             entity = _ensure_housemate_entity(hass, entry, name)
             entity.set_have_not(is_have_not)
         _refresh_aggregates(hass, entry.entry_id)
